@@ -12,6 +12,10 @@ dependencies = [
 
 [project.scripts]
 staccato = "staccato.app:main"
+
+[tool.staccato.logging]
+debug = false
+
 [[index]]
 url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
 default = true

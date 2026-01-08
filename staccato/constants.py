@@ -13,9 +13,17 @@ CANONICAL_KEY_ORDER = {
 
 VIEW_WINDOW_SECONDS = 5.0
 
-VIEW_RESOLUTION = 0.05
+# Time resolution for view calculations (10ms)
+# Reduced from 50ms to 10ms for finer-grained scrolling while maintaining performance
+VIEW_RESOLUTION = 0.01
 
+# Number of blocks in the timeline visualization
 TIMELINE_BLOCK_WIDTH = 100
+
+# Time alignment interval for rendering (50ms = 20fps)
+# Calculated as: VIEW_WINDOW_SECONDS / TIMELINE_BLOCK_WIDTH
+# This ensures block boundaries align with event timestamps to prevent visual jitter
+TIME_ALIGNMENT_INTERVAL = VIEW_WINDOW_SECONDS / TIMELINE_BLOCK_WIDTH
 
 # Finger Adhesion Severity Thresholds (milliseconds)
 ADHESION_THRESHOLD_MINOR = 50      # Existing threshold - yellow warning

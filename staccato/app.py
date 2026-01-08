@@ -32,6 +32,9 @@ class StaccatoApp(App):
     _CSS_FILE = Path(__file__).parent / "styles" / "default.tcss"
     CSS_PATH = str(_CSS_FILE)
     TITLE = "Staccato - Input Micro-timing Analyzer"
+    
+    # Enable double buffering and optimize rendering
+    ENABLE_COMMAND_PALETTE = False  # Reduce unnecessary UI overhead
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -86,8 +89,9 @@ class StaccatoApp(App):
             import traceback
             logger.error(traceback.format_exc())
 
-        # Start 60fps update loop
-        self.set_interval(1/60, self.update_ui)
+        # Start UI update loop (20fps is sufficient for TUI and reduces flicker)
+        # Higher FPS causes more frequent re-renders which can cause flicker in terminals
+        self.set_interval(1/20, self.update_ui)
 
         # Start stats calculation (every second)
         self.set_interval(1, self.calculate_stats)
@@ -97,8 +101,8 @@ class StaccatoApp(App):
         # Stop keyboard listener
         self.collector.stop()
 
-    def update_ui(self):
-        """60fps UI update - processes queued events."""
+    def update_ui(self) -> None:
+        """20fps UI update - processes queued events and updates UI."""
         # Process all pending events
         while not self.event_queue.empty():
             try:
@@ -107,8 +111,10 @@ class StaccatoApp(App):
             except queue.Empty:
                 break
 
-        # Update piano roll visualization
-        self.query_one(PianoRollWidget).refresh()
+        # Always refresh piano roll to allow time-based scrolling
+        # The piano roll's internal diffing mechanism prevents unnecessary re-renders
+        piano_roll = self.query_one(PianoRollWidget)
+        piano_roll.refresh()
 
     def process_event(self, event: KeyEvent):
         """Process a single keyboard event."""
@@ -134,9 +140,6 @@ class StaccatoApp(App):
         if not processed:
             logger.debug(f"[APP] Event {event.key} ({event.event_type}) was filtered out by key tracker")
             return
-
-        # Force immediate refresh for real-time responsiveness
-        self.query_one(PianoRollWidget).refresh()
 
     def calculate_stats(self):
         """Calculate and display universal statistics every second."""

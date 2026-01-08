@@ -64,7 +64,7 @@
   - [Textual](https://github.com/Textualize/textual) (TUI framework)
   - `keyboard` (Low-level keyboard hooks)
   - `loguru` (Structured logging)
-- **Performance**: 60fps smooth rendering, independent input monitoring daemon thread, zero UI blocking
+- **Performance**: Smooth rendering with independent input monitoring daemon thread, zero UI blocking
 - **Architecture**: Event-driven design with atomic snapshot rendering for state consistency
 
 ## 📦 Installation
