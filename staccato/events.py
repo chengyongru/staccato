@@ -23,6 +23,22 @@ class KeyEvent:
 
 
 @dataclass
+class KeyInteraction:
+    """Represents an interaction between two keys.
+
+    Attributes:
+        key1: First key in the pair
+        key2: Second key in the pair
+        overlap_duration: Time duration of overlap in seconds
+        overlap_percentage: Percentage of overlap relative to total press duration
+    """
+    key1: str
+    key2: str
+    overlap_duration: float
+    overlap_percentage: float
+
+
+@dataclass
 class KeySession:
     """Analyzable session of key events.
 

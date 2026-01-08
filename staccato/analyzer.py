@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Optional
-from staccato.events import KeyEvent
+from staccato.events import KeyEvent, KeyInteraction
 
 
 @dataclass
@@ -110,3 +110,96 @@ class TimingAnalyzer:
         ]
 
         return len(recent_presses) / window
+
+    def find_hotspot_overlaps(self, metrics: list[KeyMetrics], top_n: int = 3) -> list[KeyInteraction]:
+        """Detect and rank overlapping key pairs by frequency and duration.
+
+        Args:
+            metrics: List of KeyMetrics to analyze
+            top_n: Number of top hotspot pairs to return
+
+        Returns:
+            List of KeyInteraction objects sorted by overlap duration
+        """
+        from collections import defaultdict
+
+        overlap_pairs = defaultdict(lambda: {'count': 0, 'total_duration': 0.0})
+
+        for i, m1 in enumerate(metrics):
+            for m2 in metrics[i+1:]:
+                if (m1.release_time is not None and
+                    m2.release_time is not None and
+                    m1.press_time < m2.release_time and
+                    m2.press_time < m1.release_time):
+
+                    overlap_start = max(m1.press_time, m2.press_time)
+                    overlap_end = min(m1.release_time, m2.release_time)
+                    overlap_duration = overlap_end - overlap_start
+
+                    if overlap_duration > 0:
+                        pair_key = tuple(sorted([m1.key, m2.key]))
+                        overlap_pairs[pair_key]['count'] += 1
+                        overlap_pairs[pair_key]['total_duration'] += overlap_duration
+
+        interactions = []
+        for (key1, key2), data in overlap_pairs.items():
+            total_duration = data['total_duration']
+            count = data['count']
+            avg_overlap_duration = total_duration / count if count > 0 else 0
+
+            total_press_duration = sum(
+                (m.release_time - m.press_time)
+                for m in metrics
+                if m.key in [key1, key2] and m.release_time is not None
+            )
+
+            overlap_percentage = (total_duration / total_press_duration * 100) if total_press_duration > 0 else 0
+
+            interaction = KeyInteraction(
+                key1=key1,
+                key2=key2,
+                overlap_duration=avg_overlap_duration,
+                overlap_percentage=overlap_percentage
+            )
+            interactions.append(interaction)
+
+        interactions.sort(key=lambda x: x.overlap_duration, reverse=True)
+        return interactions[:top_n]
+
+    def get_most_recent_pair_overlap(self, metrics: list[KeyMetrics]) -> Optional[KeyInteraction]:
+        """Find the most recent overlapping key pair.
+
+        Args:
+            metrics: List of KeyMetrics to analyze
+
+        Returns:
+            KeyInteraction of the most recent overlap, or None if no overlaps found
+        """
+        recent_overlap = None
+        latest_overlap_end = 0.0
+
+        for i, m1 in enumerate(metrics):
+            for m2 in metrics[i+1:]:
+                if (m1.release_time is not None and
+                    m2.release_time is not None and
+                    m1.press_time < m2.release_time and
+                    m2.press_time < m1.release_time):
+
+                    overlap_start = max(m1.press_time, m2.press_time)
+                    overlap_end = min(m1.release_time, m2.release_time)
+
+                    if overlap_end > latest_overlap_end:
+                        latest_overlap_end = overlap_end
+                        overlap_duration = overlap_end - overlap_start
+
+                        total_press_duration = (m1.release_time - m1.press_time) + (m2.release_time - m2.press_time)
+                        overlap_percentage = (overlap_duration / total_press_duration * 100) if total_press_duration > 0 else 0
+
+                        recent_overlap = KeyInteraction(
+                            key1=m1.key,
+                            key2=m2.key,
+                            overlap_duration=overlap_duration,
+                            overlap_percentage=overlap_percentage
+                        )
+
+        return recent_overlap

@@ -1,56 +1,128 @@
-"""Statistics display panel for Staccato."""
+"""Universal statistics display panel for Staccato v3.0."""
 
-from textual.containers import Horizontal
-from textual.widgets import Static, Label, Digits
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Static, Label
 
 
-class StatsItem(Horizontal):
-    """A single statistics item container."""
+class MostRecentPairDisplay(Vertical):
+    """Display for the most recent key pair overlap."""
 
     DEFAULT_CSS = """
-    StatsItem {
+    MostRecentPairDisplay {
         width: 1fr;
         content-align: center middle;
         background: #1a202c;
         border: solid #414868;
         margin: 0 1;
-        padding: 1 2;
+        padding: 1;
         layout: vertical;
         height: 5;
     }
 
-    StatsItem > Label {
+    MostRecentPairDisplay > Label {
         color: #565f89;
-        text-style: italic;
+        text-style: italic bold;
         margin: 0 1;
     }
 
-    StatsItem > Digits {
-        color: #7aa2f7;
-        text-style: bold;
+    MostRecentPairDisplay > Static {
+        color: #c0caf5;
         margin: 0 1;
     }
     """
 
-    def __init__(self, label_text: str, initial_value: str = "0", **kwargs):
-        """Initialize stats item.
-
-        Args:
-            label_text: Text for the label
-            initial_value: Initial value for the digits display
-        """
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._label_text = label_text
-        self._initial_value = initial_value
+        self._pair_label = Label("Most Recent Pair", classes="label")
+        self._details_label = Static("Waiting for data...", classes="details")
 
     def compose(self):
-        """Compose the stats item."""
-        yield Label(self._label_text, classes="label")
-        yield Digits(self._initial_value)
+        yield self._pair_label
+        yield self._details_label
+
+    def update_pair(self, key1: str, key2: str, overlap_ms: float, status: str):
+        """Update the display with a new key pair.
+
+        Args:
+            key1: First key in the pair
+            key2: Second key in the pair
+            overlap_ms: Overlap duration in milliseconds
+            status: Status indicator (e.g., "PASS" or "FAIL")
+        """
+        self._details_label.update(
+            f"[bold cyan]Pair:[/bold cyan] [{key1.upper()}] → [{key2.upper()}]\n"
+            f"[bold yellow]Overlap:[/bold yellow] {overlap_ms:.0f}ms ({status})"
+        )
+
+    def clear(self):
+        """Clear the display."""
+        self._details_label.update("Waiting for data...")
+
+
+class HotspotsDisplay(Vertical):
+    """Display for top hotspot key pairs."""
+
+    DEFAULT_CSS = """
+    HotspotsDisplay {
+        width: 1fr;
+        content-align: left top;
+        background: #1a202c;
+        border: solid #414868;
+        margin: 0 1;
+        padding: 1;
+        layout: vertical;
+        height: 5;
+    }
+
+    HotspotsDisplay > Label {
+        color: #565f89;
+        text-style: italic bold;
+        margin: 0 1;
+    }
+
+    HotspotsDisplay > Static {
+        color: #c0caf5;
+        margin: 0 1;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._title_label = Label("Adhesion Hotspots (Top 3)", classes="label")
+        self._hotspots_label = Static("No hotspots yet...", classes="hotspots")
+
+    def compose(self):
+        yield self._title_label
+        yield self._hotspots_label
+
+    def update_hotspots(self, hotspots: list):
+        """Update the display with new hotspot data.
+
+        Args:
+            hotspots: List of KeyInteraction objects
+        """
+        if not hotspots:
+            self._hotspots_label.update("No hotspots yet...")
+            return
+
+        text_lines = []
+        for i, hotspot in enumerate(hotspots, 1):
+            key1, key2 = hotspot.key1, hotspot.key2
+            overlap_ms = hotspot.overlap_duration * 1000
+            percentage = hotspot.overlap_percentage
+
+            line = f"{i}. [{key1.upper()}] & [{key2.upper()}]: {percentage:.0f}%"
+            text_lines.append(line)
+
+        self._hotspots_label.update("\n".join(text_lines))
+
+    def clear(self):
+        """Clear the display."""
+        self._hotspots_label.update("No hotspots yet...")
 
 
 class StatsPanel(Horizontal):
-    """Statistics display panel."""
+    """Universal statistics display panel."""
 
     DEFAULT_CSS = """
     StatsPanel {
@@ -65,22 +137,31 @@ class StatsPanel(Horizontal):
 
     def compose(self):
         """Compose the stats panel."""
-        yield StatsItem("Total Keys", "0", id="total-keys-item")
-        yield StatsItem("KPS", "0.0", id="kps-item")
-        yield StatsItem("Avg Duration", "0ms", id="avg-duration-item")
-        yield StatsItem("Overlaps", "0", id="overlaps-item")
+        yield MostRecentPairDisplay(id="most-recent-pair")
+        yield HotspotsDisplay(id="hotspots")
 
-    def update_stats(self, total: int, kps: float, avg: float, overlaps: int):
-        """Update statistics display.
+    def update_universal_stats(self, recent_interaction, hotspots: list):
+        """Update universal statistics display.
 
         Args:
-            total: Total number of key presses
-            kps: Keys per second
-            avg: Average duration in milliseconds
-            overlaps: Number of detected overlaps
+            recent_interaction: Most recent KeyInteraction object (or None)
+            hotspots: List of KeyInteraction objects
         """
-        # Query the Digits widget within each StatsItem
-        self.query_one("#total-keys-item Digits").update(str(total))
-        self.query_one("#kps-item Digits").update(f"{kps:.1f}")
-        self.query_one("#avg-duration-item Digits").update(f"{avg:.0f}ms")
-        self.query_one("#overlaps-item Digits").update(str(overlaps))
+        if recent_interaction:
+            overlap_ms = recent_interaction.overlap_duration * 1000
+            status = "FAIL" if overlap_ms > 50 else "PASS"
+            self.query_one("#most-recent-pair", MostRecentPairDisplay).update_pair(
+                recent_interaction.key1,
+                recent_interaction.key2,
+                overlap_ms,
+                status
+            )
+        else:
+            self.query_one("#most-recent-pair", MostRecentPairDisplay).clear()
+
+        self.query_one("#hotspots", HotspotsDisplay).update_hotspots(hotspots)
+
+    def clear(self):
+        """Clear all displays."""
+        self.query_one("#most-recent-pair", MostRecentPairDisplay).clear()
+        self.query_one("#hotspots", HotspotsDisplay).clear()

@@ -38,36 +38,13 @@ StatsPanel {
     margin: 1 0;
 }
 
-StatsItem {
-    width: 1fr;
-    content-align: center middle;
-    background: #1a202c;
-    border: solid #414868;
-    margin: 0 1;
-    padding: 1 2;
-    layout: vertical;
-    height: 5;
-}
-
-StatsItem > Label {
-    color: #565f89;
-    text-style: italic;
-    margin: 0 1;
-}
-
-StatsItem > Digits {
-    color: #7aa2f7;
-    text-style: bold;
-    margin: 0 1;
-}
-
 /* Piano Roll */
 PianoRollWidget {
     background: #1a202c;
     border: solid #7aa2f7;
     height: 20;
     margin: 1 0;
-    padding: 0;
+    padding: 1;
 }
 
 /* Event Log */

@@ -62,18 +62,8 @@ class StaccatoApp(App):
 
     def on_mount(self) -> None:
         """Initialize app on mount."""
-        # Start keyboard listener using standard threading
-        import threading
-
-        self.collector.is_running = True
-
-        # Start listener thread manually
-        self.listener_thread = threading.Thread(
-            target=self._run_keyboard_listener,
-            name="keyboard_listener",
-            daemon=True
-        )
-        self.listener_thread.start()
+        # Start keyboard listener using keyboard library
+        self.collector.start()
 
         # Start 60fps update loop
         self.set_interval(1/60, self.update_ui)
@@ -83,74 +73,13 @@ class StaccatoApp(App):
 
     def _run_keyboard_listener(self):
         """Run keyboard listener in background thread."""
-        from pynput import keyboard
-
-        def on_press(key):
-            if not self.collector.is_running:
-                return
-
-            try:
-                key_name = self.collector.get_key_name(key)
-                timestamp = time.perf_counter()
-
-                event = KeyEvent(
-                    key=key_name,
-                    event_type='press',
-                    timestamp=timestamp
-                )
-
-                # Direct queue put (thread-safe)
-                try:
-                    self.event_queue.put_nowait(event)
-                except:
-                    pass  # Queue full, ignore
-            except Exception:
-                pass  # Ignore errors
-
-        def on_release(key):
-            if not self.collector.is_running:
-                return
-
-            try:
-                key_name = self.collector.get_key_name(key)
-                timestamp = time.perf_counter()
-
-                event = KeyEvent(
-                    key=key_name,
-                    event_type='release',
-                    timestamp=timestamp
-                )
-
-                # Direct queue put (thread-safe)
-                try:
-                    self.event_queue.put_nowait(event)
-                except:
-                    pass  # Queue full, ignore
-            except Exception:
-                pass  # Ignore errors
-
-        # Start listener and wait
-        try:
-            listener = keyboard.Listener(
-                on_press=on_press,
-                on_release=on_release,
-                suppress=False
-            )
-            self.collector.listener = listener
-            listener.start()
-            listener.join()
-        except Exception:
-            pass  # Exit gracefully
+        # Start keyboard listener
+        self.collector.start()
 
     def on_unmount(self) -> None:
         """Clean up when app is closing."""
         # Stop keyboard listener
-        self.collector.is_running = False
-        if self.collector.listener:
-            try:
-                self.collector.listener.stop()
-            except Exception:
-                pass
+        self.collector.stop()
 
     def update_ui(self):
         """60fps UI update - processes queued events."""
@@ -184,12 +113,14 @@ class StaccatoApp(App):
         # Update piano roll
         self.query_one(PianoRollWidget).add_event(event)
 
+        # Force immediate refresh for real-time responsiveness
+        self.query_one(PianoRollWidget).refresh()
+
         # Update event log
         self.query_one(EventLog).log_event(event)
 
     def calculate_stats(self):
-        """Calculate and display statistics every second."""
-        # Use live_events for real-time statistics
+        """Calculate and display universal statistics every second."""
         events = self.live_events if self.live_events else []
 
         if not events:
@@ -197,19 +128,14 @@ class StaccatoApp(App):
 
         metrics = self.analyzer.analyze_session(events)
 
-        # Calculate basic stats
-        total_keys = len([e for e in events if e.event_type == 'press'])
-        kps = self.analyzer.calculate_kps(events)
+        if not metrics:
+            return
 
-        durations = [m.duration for m in metrics if m.duration]
-        avg_duration = (sum(durations) / len(durations) * 1000) if durations else 0
+        recent_interaction = self.analyzer.get_most_recent_pair_overlap(metrics)
+        hotspots = self.analyzer.find_hotspot_overlaps(metrics, top_n=3)
 
-        overlaps = self.analyzer.detect_overlaps(metrics)
-        overlap_count = len(overlaps)
-
-        # Update stats panel
-        self.query_one(StatsPanel).update_stats(
-            total_keys, kps, avg_duration, overlap_count
+        self.query_one(StatsPanel).update_universal_stats(
+            recent_interaction, hotspots
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -266,8 +192,8 @@ class StaccatoApp(App):
     def clear_session(self):
         """Clear current session."""
         self.current_session = None
-        self.live_events = []  # Also clear live events
+        self.live_events = []
         self.query_one(PianoRollWidget).clear()
         self.query_one(EventLog).clear()
-        self.query_one(StatsPanel).update_stats(0, 0, 0, 0)
+        self.query_one(StatsPanel).clear()
         self.query_one(EventLog).log_message("Session cleared.")
