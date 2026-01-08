@@ -21,6 +21,9 @@ from staccato.logger import get_logger
 
 logger = get_logger("APP")
 
+# Time window for live event statistics (seconds)
+LIVE_EVENT_WINDOW_SECONDS = 10.0
+
 
 class StaccatoApp(App):
     """Main Staccato application."""
@@ -74,18 +77,20 @@ class StaccatoApp(App):
         self.key_tracker.add_listener(lambda e, keys: event_log.log_event(e, keys))
 
         # Start keyboard listener using keyboard library
-        self.collector.start()
+        logger.info("[APP] Starting keyboard collector...")
+        try:
+            self.collector.start()
+            logger.info("[APP] Keyboard collector started successfully")
+        except Exception as e:
+            logger.error(f"[APP] Failed to start keyboard collector: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
         # Start 60fps update loop
         self.set_interval(1/60, self.update_ui)
 
         # Start stats calculation (every second)
         self.set_interval(1, self.calculate_stats)
-
-    def _run_keyboard_listener(self):
-        """Run keyboard listener in background thread."""
-        # Start keyboard listener
-        self.collector.start()
 
     def on_unmount(self) -> None:
         """Clean up when app is closing."""
@@ -116,11 +121,11 @@ class StaccatoApp(App):
         # Always add to live events for real-time statistics
         self.live_events.append(event)
 
-        # Keep only last 10 seconds of live events for stats
+        # Keep only last N seconds of live events for stats
         current_time = event.timestamp
         self.live_events = [
             e for e in self.live_events
-            if current_time - e.timestamp <= 10.0
+            if current_time - e.timestamp <= LIVE_EVENT_WINDOW_SECONDS
         ]
 
         # Process event through centralized key tracker
@@ -213,3 +218,9 @@ class StaccatoApp(App):
         self.query_one(EventLog).clear()
         self.query_one(StatsPanel).clear()
         self.query_one(EventLog).log_message("Session cleared.")
+
+
+def main() -> None:
+    """Entry point for Staccato application."""
+    app = StaccatoApp()
+    app.run()

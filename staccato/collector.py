@@ -5,8 +5,12 @@ import threading
 from staccato.events import KeyEvent
 import time
 import traceback
+from typing import TYPE_CHECKING
 
 from staccato.logger import get_logger
+
+if TYPE_CHECKING:
+    from staccato.app import StaccatoApp
 
 logger = get_logger("COLLECTOR")
 
@@ -17,7 +21,10 @@ class KeyboardCollector:
     Uses the keyboard library for better Windows compatibility.
     """
 
-    def __init__(self, app):
+    # Sleep interval for thread keep-alive loop (seconds)
+    THREAD_SLEEP_INTERVAL = 0.1
+
+    def __init__(self, app: "StaccatoApp") -> None:
         """Initialize keyboard collector.
 
         Args:
@@ -25,29 +32,30 @@ class KeyboardCollector:
         """
         self.app = app
         self.is_running = False
-        self._thread = None
         logger.info("[COLLECTOR] Initialized")
 
-    def start(self):
+    def start(self) -> None:
         """Start keyboard listener in background thread."""
         logger.info("[COLLECTOR] Starting...")
         self.is_running = True
-        self._thread = threading.Thread(
+
+        # Create and start the listener thread
+        listener_thread = threading.Thread(
             target=self._run_keyboard_listener,
             name="keyboard_listener",
             daemon=True
         )
-        self._thread.start()
-        logger.info(f"[COLLECTOR] Thread started, is_running={self.is_running}")
+        listener_thread.start()
+        logger.info(f"[COLLECTOR] Thread started, is_running={self.is_running}, thread_alive={listener_thread.is_alive()}")
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop keyboard listener."""
         logger.info("[COLLECTOR] Stopping...")
         self.is_running = False
         keyboard.unhook_all()
         logger.info("[COLLECTOR] Stopped")
 
-    def _run_keyboard_listener(self):
+    def _run_keyboard_listener(self) -> None:
         """Run keyboard listener using keyboard library."""
         logger.info("[COLLECTOR] Listener thread started")
 
@@ -87,7 +95,7 @@ class KeyboardCollector:
 
         # Keep the thread alive
         while self.is_running:
-            threading.sleep(0.1)
+            threading.sleep(self.THREAD_SLEEP_INTERVAL)
 
         logger.info("[COLLECTOR] Listener thread exiting")
 

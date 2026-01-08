@@ -18,9 +18,9 @@ class KeyStateTracker:
         self.active_keys = {}
         self.listeners = []
 
-    def add_listener(self, callback):
+    def add_listener(self, callback) -> None:
         """Register a callback to receive key events.
-        
+
         Args:
             callback: Function that accepts (event, active_keys) parameters
         """
@@ -28,9 +28,9 @@ class KeyStateTracker:
             self.listeners.append(callback)
             logger.debug(f"[KEY_TRACKER] Added listener, total={len(self.listeners)}")
 
-    def remove_listener(self, callback):
+    def remove_listener(self, callback) -> None:
         """Unregister a callback.
-        
+
         Args:
             callback: Function to remove from listeners
         """
@@ -38,11 +38,14 @@ class KeyStateTracker:
             self.listeners.remove(callback)
             logger.debug(f"[KEY_TRACKER] Removed listener, remaining={len(self.listeners)}")
 
-    def process_event(self, event: KeyEvent):
+    def process_event(self, event: KeyEvent) -> bool:
         """Process a key event and update state.
 
         Args:
             event: KeyEvent to process
+
+        Returns:
+            True if event was processed, False if filtered
         """
         key = event.key.lower()
 
@@ -75,9 +78,9 @@ class KeyStateTracker:
         
         return True
 
-    def _notify_listeners(self, event: KeyEvent, active_keys_snapshot: dict):
+    def _notify_listeners(self, event: KeyEvent, active_keys_snapshot: dict) -> None:
         """Notify all registered listeners of the event.
-        
+
         Args:
             event: KeyEvent to notify listeners about
             active_keys_snapshot: Snapshot of active keys at the time of event
@@ -88,15 +91,15 @@ class KeyStateTracker:
             except Exception as e:
                 logger.error(f"[KEY_TRACKER] Error in listener: {e}")
 
-    def get_active_keys(self):
+    def get_active_keys(self) -> dict:
         """Get a snapshot of currently active keys.
-        
+
         Returns:
             dict: Copy of active_keys mapping
         """
         return dict(self.active_keys)
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all state."""
         self.active_keys.clear()
         logger.debug(f"[KEY_TRACKER] Cleared all state")

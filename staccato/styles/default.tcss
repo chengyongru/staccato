@@ -103,3 +103,21 @@ Footer {
     background: #151922;
     border-top: solid #414868;
 }
+
+/* Command Input */
+#command-input {
+    background: #1a202c;
+    border: solid #f7768e;
+    color: #c0caf5;
+    padding: 0 1;
+    height: 3;
+}
+
+#command-input.hidden {
+    display: none;
+}
+
+#command-input:focus {
+    border: solid #f7768e;
+    background: #24283b;
+}

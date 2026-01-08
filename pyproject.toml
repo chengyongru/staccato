@@ -1,15 +1,17 @@
 [project]
 name = "staccato"
 version = "0.1.0"
-description = "Add your description here"
+description = "Universal HCI Micro-Timing Analysis Terminal"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "keyboard>=0.13.5",
     "loguru>=0.7.3",
-    "pynput>=1.8.1",
     "textual>=7.0.0",
 ]
+
+[project.scripts]
+staccato = "staccato.app:main"
 [[index]]
 url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
 default = true
