@@ -16,3 +16,20 @@ VIEW_WINDOW_SECONDS = 5.0
 VIEW_RESOLUTION = 0.05
 
 TIMELINE_BLOCK_WIDTH = 100
+
+# Finger Adhesion Severity Thresholds (milliseconds)
+ADHESION_THRESHOLD_MINOR = 50      # Existing threshold - yellow warning
+ADHESION_THRESHOLD_MODERATE = 100  # Orange alert
+ADHESION_THRESHOLD_SEVERE = 150    # Red critical
+
+# Severity Colors (Tokyo Night palette)
+SEVERITY_COLOR_CLEAN = "#9ece6a"     # Green
+SEVERITY_COLOR_MINOR = "#e0af68"     # Yellow/Orange
+SEVERITY_COLOR_MODERATE = "#ff9e64"  # Orange
+SEVERITY_COLOR_SEVERE = "#f7768e"    # Red
+
+# Signal Hygiene Score Weights
+HYGIENE_WEIGHT_CLEAN = 1.0
+HYGIENE_WEIGHT_MINOR = 0.7
+HYGIENE_WEIGHT_MODERATE = 0.3
+HYGIENE_WEIGHT_SEVERE = 0.0

@@ -1,31 +1,36 @@
-"""Universal statistics display panel for Staccato v3.0."""
+"""Signal Hygiene Dashboard for Staccato v3.0."""
 
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static, Label
 
 
-class MostRecentPairDisplay(Vertical):
-    """Display for the most recent key pair overlap."""
+class SessionScoreDisplay(Vertical):
+    """Display for overall signal hygiene score."""
 
     DEFAULT_CSS = """
-    MostRecentPairDisplay {
-        width: 1fr;
+    SessionScoreDisplay {
+        width: 25%;
+        min-width: 20;
+        background: #1a202c;
+        border: solid #7aa2f7;
+        padding: 1;
+        layout: vertical;
         content-align: center middle;
-        background: #1a202c;
-        border: solid #414868;
-        margin: 0 1;
-        padding: 1;
-        layout: vertical;
         height: 10;
     }
 
-    MostRecentPairDisplay > Label {
+    SessionScoreDisplay.excellent { border: solid #9ece6a; }
+    SessionScoreDisplay.good { border: solid #e0af68; }
+    SessionScoreDisplay.fair { border: solid #ff9e64; }
+    SessionScoreDisplay.poor { border: solid #f7768e; }
+
+    SessionScoreDisplay > Label {
         color: #565f89;
         text-style: italic bold;
         margin: 0 1;
     }
 
-    MostRecentPairDisplay > Static {
+    SessionScoreDisplay > Static {
         color: #c0caf5;
         margin: 0 1;
     }
@@ -33,96 +38,191 @@ class MostRecentPairDisplay(Vertical):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._pair_label = Label("Most Recent Pair", classes="label")
-        self._details_label = Static("Waiting for data...", classes="details")
-
-    def compose(self):
-        yield self._pair_label
-        yield self._details_label
-
-    def update_pair(self, key1: str, key2: str, overlap_ms: float, status: str):
-        """Update the display with a new key pair.
-
-        Args:
-            key1: First key in the pair
-            key2: Second key in the pair
-            overlap_ms: Overlap duration in milliseconds
-            status: Status indicator (e.g., "PASS" or "FAIL")
-        """
-        self._details_label.update(
-            f"[bold cyan]Pair:[/bold cyan] [{key1.upper()}] → [{key2.upper()}]\n"
-            f"[bold yellow]Overlap:[/bold yellow] {overlap_ms:.0f}ms ({status})"
-        )
-
-    def clear(self):
-        """Clear the display."""
-        self._details_label.update("Waiting for data...")
-
-
-class HotspotsDisplay(Vertical):
-    """Display for top hotspot key pairs."""
-
-    DEFAULT_CSS = """
-    HotspotsDisplay {
-        width: 1fr;
-        content-align: left top;
-        background: #1a202c;
-        border: solid #414868;
-        margin: 0 1;
-        padding: 1;
-        layout: vertical;
-        height: 10;
-    }
-
-    HotspotsDisplay > Label {
-        color: #565f89;
-        text-style: italic bold;
-        margin: 0 1;
-    }
-
-    HotspotsDisplay > Static {
-        color: #c0caf5;
-        margin: 0 1;
-    }
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._title_label = Label("Adhesion Hotspots (Top 3)", classes="label")
-        self._hotspots_label = Static("No hotspots yet...", classes="hotspots")
+        self._title_label = Label("SIGNAL HYGIENE", classes="label")
+        self._score_label = Static("--", classes="score")
+        self._status_label = Static("Waiting...", classes="status")
 
     def compose(self):
         yield self._title_label
-        yield self._hotspots_label
+        yield self._score_label
+        yield self._status_label
 
-    def update_hotspots(self, hotspots: list):
-        """Update the display with new hotspot data.
+    def update_score(self, metrics):
+        """Update the display with session metrics.
+
+        Args:
+            metrics: SessionMetrics object
+        """
+        score = int(metrics.hygiene_score)
+        self._score_label.update(f"[bold cyan]{score}[/bold cyan]")
+
+        # Determine status and color
+        # Remove all existing classes first
+        self.remove_class("excellent")
+        self.remove_class("good")
+        self.remove_class("fair")
+        self.remove_class("poor")
+
+        if score >= 80:
+            status = "EXCELLENT"
+            self.set_class(True, "excellent")
+        elif score >= 60:
+            status = "GOOD"
+            self.set_class(True, "good")
+        elif score >= 40:
+            status = "FAIR"
+            self.set_class(True, "fair")
+        else:
+            status = "POOR"
+            self.set_class(True, "poor")
+
+        self._status_label.update(f"[bold]{status}[/bold]")
+
+    def clear(self):
+        """Clear the display."""
+        self._score_label.update("--")
+        self._status_label.update("Waiting...")
+        self.remove_class("excellent")
+        self.remove_class("good")
+        self.remove_class("fair")
+        self.remove_class("poor")
+
+
+class SignalQualityBreakdown(Vertical):
+    """Display for signal quality breakdown with severity distribution."""
+
+    DEFAULT_CSS = """
+    SignalQualityBreakdown {
+        width: 40%;
+        background: #1a202c;
+        border: solid #414868;
+        margin: 0 1;
+        padding: 1;
+        layout: vertical;
+        height: 10;
+    }
+
+    SignalQualityBreakdown > Label {
+        color: #565f89;
+        text-style: italic bold;
+        margin: 0 1;
+    }
+
+    SignalQualityBreakdown > Static {
+        color: #c0caf5;
+        margin: 0 1;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._title_label = Label("SIGNAL QUALITY", classes="label")
+        self._breakdown_label = Static("Waiting for data...", classes="breakdown")
+
+    def compose(self):
+        yield self._title_label
+        yield self._breakdown_label
+
+    def update_breakdown(self, metrics):
+        """Update the display with session metrics.
+
+        Args:
+            metrics: SessionMetrics object
+        """
+        # Calculate actual clean percentage (independent keypresses / total keypresses)
+        clean_pct = int((metrics.clean_keypresses / metrics.total_keypresses * 100)
+                       if metrics.total_keypresses > 0 else 100)
+
+        # Create visual bar
+        bar_length = int(clean_pct / 10)
+        bar = "█" * bar_length + "░" * (10 - bar_length)
+
+        lines = [
+            f"[bold cyan]{bar}[/bold cyan] [bold]{clean_pct}%[/bold] Clean",
+            f"",
+            f"[#9ece6a]Independent:[/#9ece6a] {metrics.clean_keypresses}",
+            f"[#e0af68]Minor:[/#e0af68] {metrics.minor_adhesions}",
+            f"[#ff9e64]Moderate:[/#ff9e64] {metrics.moderate_adhesions}",
+            f"[#f7768e]Severe:[/#f7768e] {metrics.severe_adhesions}",
+        ]
+
+        self._breakdown_label.update("\n".join(lines))
+
+    def clear(self):
+        """Clear the display."""
+        self._breakdown_label.update("Waiting for data...")
+
+
+class WorstOffendersDisplay(Vertical):
+    """Display for top problematic key pairs with severity indicators."""
+
+    DEFAULT_CSS = """
+    WorstOffendersDisplay {
+        width: 35%;
+        background: #1a202c;
+        border: solid #414868;
+        margin: 0 1;
+        padding: 1;
+        layout: vertical;
+        height: 10;
+    }
+
+    WorstOffendersDisplay > Label {
+        color: #565f89;
+        text-style: italic bold;
+        margin: 0 1;
+    }
+
+    WorstOffendersDisplay > Static {
+        color: #c0caf5;
+        margin: 0 1;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._title_label = Label("WORST OFFENDERS (Top 5)", classes="label")
+        self._offenders_label = Static("No data yet...", classes="offenders")
+
+    def compose(self):
+        yield self._title_label
+        yield self._offenders_label
+
+    def update_offenders(self, hotspots):
+        """Update the display with hotspot data.
 
         Args:
             hotspots: List of KeyInteraction objects
         """
         if not hotspots:
-            self._hotspots_label.update("No hotspots yet...")
+            self._offenders_label.update("No data yet...")
             return
 
         text_lines = []
         for i, hotspot in enumerate(hotspots, 1):
             key1, key2 = hotspot.key1, hotspot.key2
             overlap_ms = hotspot.overlap_duration * 1000
-            percentage = hotspot.overlap_percentage
 
-            line = f"{i}. [{key1.upper()}] & [{key2.upper()}]: {percentage:.0f}%"
+            # Determine severity
+            if overlap_ms < 50:
+                severity = "[#e0af68]MINOR[#e0af68]"
+            elif overlap_ms < 100:
+                severity = "[#ff9e64]MODERATE[#ff9e64]"
+            else:
+                severity = "[#f7768e]SEVERE[#f7768e]"
+
+            line = f"{i}. [{key1.upper()}]+[{key2.upper()}]: {int(overlap_ms)}ms {severity}"
             text_lines.append(line)
 
-        self._hotspots_label.update("\n".join(text_lines))
+        self._offenders_label.update("\n".join(text_lines))
 
     def clear(self):
         """Clear the display."""
-        self._hotspots_label.update("No hotspots yet...")
+        self._offenders_label.update("No data yet...")
 
 
 class StatsPanel(Horizontal):
-    """Universal statistics display panel."""
+    """Signal Hygiene Dashboard - universal statistics display panel."""
 
     DEFAULT_CSS = """
     StatsPanel {
@@ -138,31 +238,29 @@ class StatsPanel(Horizontal):
 
     def compose(self):
         """Compose the stats panel."""
-        yield MostRecentPairDisplay(id="most-recent-pair")
-        yield HotspotsDisplay(id="hotspots")
+        yield SessionScoreDisplay(id="session-score")
+        yield SignalQualityBreakdown(id="signal-quality")
+        yield WorstOffendersDisplay(id="worst-offenders")
 
-    def update_universal_stats(self, recent_interaction, hotspots: list):
+    def update_universal_stats(self, recent_interaction, hotspots, session_metrics):
         """Update universal statistics display.
 
         Args:
-            recent_interaction: Most recent KeyInteraction object (or None)
+            recent_interaction: Most recent KeyInteraction object (or None) - kept for compatibility
             hotspots: List of KeyInteraction objects
+            session_metrics: SessionMetrics object
         """
-        if recent_interaction:
-            overlap_ms = recent_interaction.overlap_duration * 1000
-            status = "FAIL" if overlap_ms > 50 else "PASS"
-            self.query_one("#most-recent-pair", MostRecentPairDisplay).update_pair(
-                recent_interaction.key1,
-                recent_interaction.key2,
-                overlap_ms,
-                status
-            )
-        else:
-            self.query_one("#most-recent-pair", MostRecentPairDisplay).clear()
+        # Update session score
+        self.query_one("#session-score", SessionScoreDisplay).update_score(session_metrics)
 
-        self.query_one("#hotspots", HotspotsDisplay).update_hotspots(hotspots)
+        # Update signal quality breakdown
+        self.query_one("#signal-quality", SignalQualityBreakdown).update_breakdown(session_metrics)
+
+        # Update worst offenders
+        self.query_one("#worst-offenders", WorstOffendersDisplay).update_offenders(hotspots)
 
     def clear(self):
         """Clear all displays."""
-        self.query_one("#most-recent-pair", MostRecentPairDisplay).clear()
-        self.query_one("#hotspots", HotspotsDisplay).clear()
+        self.query_one("#session-score", SessionScoreDisplay).clear()
+        self.query_one("#signal-quality", SignalQualityBreakdown).clear()
+        self.query_one("#worst-offenders", WorstOffendersDisplay).clear()

@@ -39,6 +39,34 @@ class KeyInteraction:
 
 
 @dataclass
+class SessionMetrics:
+    """Comprehensive session-level statistics for Signal Hygiene.
+
+    Attributes:
+        total_keypresses: Total number of key presses in session
+        clean_keypresses: Key presses with zero overlap
+        overlapping_keypresses: Key presses with any overlap detected
+        hygiene_score: Composite score (0-100) of overall finger cleanliness
+        adhesion_rate: Percentage of keypresses with overlap
+        total_overlap_duration: Total time spent in adhesion (seconds)
+        minor_adhesions: Count of overlaps < 50ms
+        moderate_adhesions: Count of overlaps 50-100ms
+        severe_adhesions: Count of overlaps > 100ms
+        key_adhesion_map: Dictionary mapping key -> adhesion count
+    """
+    total_keypresses: int
+    clean_keypresses: int
+    overlapping_keypresses: int
+    hygiene_score: float
+    adhesion_rate: float
+    total_overlap_duration: float
+    minor_adhesions: int
+    moderate_adhesions: int
+    severe_adhesions: int
+    key_adhesion_map: dict[str, int]
+
+
+@dataclass
 class KeySession:
     """Analyzable session of key events.
 

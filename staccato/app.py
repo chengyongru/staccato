@@ -150,11 +150,16 @@ class StaccatoApp(App):
         if not metrics:
             return
 
-        recent_interaction = self.analyzer.get_most_recent_pair_overlap(metrics)
-        hotspots = self.analyzer.find_hotspot_overlaps(metrics, top_n=3)
+        # Calculate session metrics
+        session_metrics = self.analyzer.calculate_session_metrics(metrics)
 
+        # Get recent interaction and hotspots
+        recent_interaction = self.analyzer.get_most_recent_pair_overlap(metrics)
+        hotspots = self.analyzer.find_hotspot_overlaps(metrics, top_n=5)
+
+        # Update stats panel with new metrics
         self.query_one(StatsPanel).update_universal_stats(
-            recent_interaction, hotspots
+            recent_interaction, hotspots, session_metrics
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

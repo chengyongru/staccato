@@ -2,7 +2,16 @@
 
 from dataclasses import dataclass
 from typing import Optional
-from staccato.events import KeyEvent, KeyInteraction
+from collections import defaultdict
+from staccato.events import KeyEvent, KeyInteraction, SessionMetrics
+from staccato.constants import (
+    ADHESION_THRESHOLD_MINOR,
+    ADHESION_THRESHOLD_MODERATE,
+    HYGIENE_WEIGHT_CLEAN,
+    HYGIENE_WEIGHT_MINOR,
+    HYGIENE_WEIGHT_MODERATE,
+    HYGIENE_WEIGHT_SEVERE
+)
 
 
 @dataclass
@@ -111,7 +120,7 @@ class TimingAnalyzer:
 
         return len(recent_presses) / window
 
-    def find_hotspot_overlaps(self, metrics: list[KeyMetrics], top_n: int = 3) -> list[KeyInteraction]:
+    def find_hotspot_overlaps(self, metrics: list[KeyMetrics], top_n: int = 5) -> list[KeyInteraction]:
         """Detect and rank overlapping key pairs by frequency and duration.
 
         Args:
@@ -203,3 +212,117 @@ class TimingAnalyzer:
                         )
 
         return recent_overlap
+
+    def calculate_session_metrics(self, metrics: list[KeyMetrics]) -> SessionMetrics:
+        """Calculate comprehensive session-level signal hygiene metrics.
+
+        The key insight is to avoid double-counting:
+        - Independent key presses (not involved in any overlap): counted as 1 event
+        - Overlapping key pairs (adhesions): counted as 1 event per pair
+
+        For example, if keys A and B overlap:
+        - This is 1 adhesion event, not 2 overlapping keypresses
+        - The pair (A, B) is classified by its overlap duration
+
+        Args:
+            metrics: List of KeyMetrics objects
+
+        Returns:
+            SessionMetrics with hygiene score, severity distribution, and per-key tracking
+        """
+        if not metrics:
+            return SessionMetrics(
+                total_keypresses=0,
+                clean_keypresses=0,
+                overlapping_keypresses=0,
+                hygiene_score=100.0,
+                adhesion_rate=0.0,
+                total_overlap_duration=0.0,
+                minor_adhesions=0,
+                moderate_adhesions=0,
+                severe_adhesions=0,
+                key_adhesion_map={}
+            )
+
+        # Step 1: Find all keys involved in overlaps
+        keys_in_overlaps = set()
+        overlap_pairs = []  # List of (key1, key2, overlap_duration)
+
+        for i, m1 in enumerate(metrics):
+            for m2 in metrics[i+1:]:
+                if (m1.release_time is not None and
+                    m2.release_time is not None and
+                    m1.press_time < m2.release_time and
+                    m2.press_time < m1.release_time):
+
+                    # Calculate overlap duration
+                    overlap_start = max(m1.press_time, m2.press_time)
+                    overlap_end = min(m1.release_time, m2.release_time)
+                    overlap_duration = overlap_end - overlap_start
+
+                    if overlap_duration > 0:
+                        keys_in_overlaps.add(m1.key)
+                        keys_in_overlaps.add(m2.key)
+                        overlap_pairs.append((m1.key, m2.key, overlap_duration))
+
+        # Step 2: Count independent key presses (not in any overlap)
+        independent_count = 0
+        for m in metrics:
+            if m.key not in keys_in_overlaps:
+                independent_count += 1
+
+        # Step 3: Classify overlap pairs by severity
+        minor_adhesions = 0
+        moderate_adhesions = 0
+        severe_adhesions = 0
+        total_overlap_duration = 0.0
+
+        key_adhesion_map = defaultdict(int)
+
+        for key1, key2, overlap_duration in overlap_pairs:
+            overlap_ms = overlap_duration * 1000
+            total_overlap_duration += overlap_duration
+
+            # Track per-key adhesion count
+            key_adhesion_map[key1] += 1
+            key_adhesion_map[key2] += 1
+
+            # Classify severity
+            if overlap_ms < ADHESION_THRESHOLD_MINOR:
+                minor_adhesions += 1
+            elif overlap_ms < ADHESION_THRESHOLD_MODERATE:
+                moderate_adhesions += 1
+            else:
+                severe_adhesions += 1
+
+        # Step 4: Calculate totals
+        total_events = independent_count + len(overlap_pairs)
+        clean_keypresses = independent_count
+        overlapping_keypresses = len(overlap_pairs)
+
+        # Step 5: Calculate hygiene score
+        # Formula: (independent × 1.0 + minor × 0.7 + moderate × 0.3 + severe × 0.0) / total × 100
+        weighted_score = (
+            independent_count * HYGIENE_WEIGHT_CLEAN +
+            minor_adhesions * HYGIENE_WEIGHT_MINOR +
+            moderate_adhesions * HYGIENE_WEIGHT_MODERATE +
+            severe_adhesions * HYGIENE_WEIGHT_SEVERE
+        )
+        hygiene_score = (weighted_score / total_events * 100) if total_events > 0 else 100.0
+
+        # Step 6: Calculate adhesion rate
+        # Rate of events that are adhesions
+        adhesion_rate = (overlapping_keypresses / total_events * 100) if total_events > 0 else 0.0
+
+        return SessionMetrics(
+            total_keypresses=len(metrics),  # Keep original count for reference
+            clean_keypresses=clean_keypresses,
+            overlapping_keypresses=overlapping_keypresses,
+            hygiene_score=hygiene_score,
+            adhesion_rate=adhesion_rate,
+            total_overlap_duration=total_overlap_duration,
+            minor_adhesions=minor_adhesions,
+            moderate_adhesions=moderate_adhesions,
+            severe_adhesions=severe_adhesions,
+            key_adhesion_map=dict(key_adhesion_map)
+        )
