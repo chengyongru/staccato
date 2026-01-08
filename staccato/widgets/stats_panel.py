@@ -16,7 +16,7 @@ class MostRecentPairDisplay(Vertical):
         margin: 0 1;
         padding: 1;
         layout: vertical;
-        height: 5;
+        height: 10;
     }
 
     MostRecentPairDisplay > Label {
@@ -71,7 +71,7 @@ class HotspotsDisplay(Vertical):
         margin: 0 1;
         padding: 1;
         layout: vertical;
-        height: 5;
+        height: 10;
     }
 
     HotspotsDisplay > Label {
@@ -127,7 +127,8 @@ class StatsPanel(Horizontal):
     DEFAULT_CSS = """
     StatsPanel {
         layout: horizontal;
-        height: 5;
+        min-height: 5;
+        height: auto;
         margin: 1 0;
     }
     """

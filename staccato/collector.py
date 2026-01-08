@@ -4,6 +4,11 @@ import keyboard
 import threading
 from staccato.events import KeyEvent
 import time
+import traceback
+
+from staccato.logger import get_logger
+
+logger = get_logger("COLLECTOR")
 
 
 class KeyboardCollector:
@@ -21,9 +26,11 @@ class KeyboardCollector:
         self.app = app
         self.is_running = False
         self._thread = None
+        logger.info("[COLLECTOR] Initialized")
 
     def start(self):
         """Start keyboard listener in background thread."""
+        logger.info("[COLLECTOR] Starting...")
         self.is_running = True
         self._thread = threading.Thread(
             target=self._run_keyboard_listener,
@@ -31,22 +38,28 @@ class KeyboardCollector:
             daemon=True
         )
         self._thread.start()
+        logger.info(f"[COLLECTOR] Thread started, is_running={self.is_running}")
 
     def stop(self):
         """Stop keyboard listener."""
+        logger.info("[COLLECTOR] Stopping...")
         self.is_running = False
         keyboard.unhook_all()
+        logger.info("[COLLECTOR] Stopped")
 
     def _run_keyboard_listener(self):
         """Run keyboard listener using keyboard library."""
+        logger.info("[COLLECTOR] Listener thread started")
+
         def on_event(event):
             if not self.is_running:
+                logger.warning("[COLLECTOR] Listener stopped, ignoring event")
                 return False  # Unhook
 
             try:
+                logger.debug(f"[COLLECTOR] Raw event: name={event.name}, type={event.event_type}")
                 key_name = self.get_key_name(event.name)
                 timestamp = time.perf_counter()
-
                 event_type = 'press' if event.event_type == 'down' else 'release'
 
                 key_event = KeyEvent(
@@ -54,23 +67,29 @@ class KeyboardCollector:
                     event_type=event_type,
                     timestamp=timestamp
                 )
+                logger.debug(f"[COLLECTOR] Created KeyEvent: key={key_name}, type={event_type}")
 
                 try:
                     self.app.event_queue.put_nowait(key_event)
-                except:
-                    pass  # Queue full, ignore
+                    logger.debug(f"[COLLECTOR] Queued event, queue_size estimated")
+                except Exception as e:
+                    logger.error(f"[COLLECTOR] Queue put failed: {e}")
 
-            except Exception:
-                pass  # Ignore errors
+            except Exception as e:
+                logger.error(f"[COLLECTOR] Event processing failed: {e}")
+                logger.error(traceback.format_exc())
 
             return True  # Continue listening
 
-        # Hook all keyboard events
+        logger.info("[COLLECTOR] Hooking keyboard events...")
         keyboard.hook(on_event)
+        logger.info("[COLLECTOR] Keyboard hook registered")
 
         # Keep the thread alive
         while self.is_running:
             threading.sleep(0.1)
+
+        logger.info("[COLLECTOR] Listener thread exiting")
 
     @staticmethod
     def get_key_name(name: str) -> str:

@@ -7,10 +7,9 @@ from staccato.constants import CANONICAL_KEY_ORDER, VIEW_WINDOW_SECONDS, VIEW_RE
 import time
 import sys
 
-from loguru import logger
+from staccato.logger import get_logger
 
-logger.remove()
-logger.add("logs/piano_roll.log", rotation="10 MB", retention="1 day", level="DEBUG")
+logger = get_logger("PIANO_ROLL")
 
 
 class PianoRollWidget(Widget):
@@ -24,7 +23,8 @@ class PianoRollWidget(Widget):
     PianoRollWidget {
         background: #1a202c;
         border: solid #7aa2f7;
-        height: 20;
+        min-height: 15;
+        height: 2fr;
         margin: 1 0;
         padding: 1;
     }
@@ -34,43 +34,26 @@ class PianoRollWidget(Widget):
         super().__init__(**kwargs)
         self.events = deque(maxlen=max_events)
         self.max_events = max_events
-        self.active_keys = {}
 
         # Snapshot for atomic rendering
         self._events_snapshot = []
         self._active_keys_snapshot = {}
         self._snapshot_timestamp = 0.0
 
-    def add_event(self, event: KeyEvent):
+    def add_event(self, event: KeyEvent, active_keys=None):
         logger.debug(f"[ADD_EVENT] key={event.key}, type={event.event_type}, timestamp={event.timestamp:.3f}")
 
-        if event.event_type == 'press':
-            # Ignore key repeat events (key already pressed)
-            if event.key in self.active_keys:
-                logger.debug(f"[REPEAT] Ignoring key repeat for {event.key}")
-                return  # Skip repeat events
+        if active_keys is not None:
+            self._active_keys_snapshot = active_keys
 
-            self.active_keys[event.key] = event.timestamp
-            logger.debug(f"[PRESS] Added to active_keys: {event.key} = {event.timestamp:.3f}")
-
-        elif event.event_type == 'release':
-            if event.key in self.active_keys:
-                del self.active_keys[event.key]
-                logger.debug(f"[RELEASE] Removed from active_keys: {event.key}")
-            else:
-                logger.debug(f"[RELEASE] Key {event.key} not in active_keys (already released or repeat)")
-                return  # Skip if not in active_keys
-
-        # Only add to events if we didn't return early
         self.events.append(event)
         self.refresh()
 
     def _create_snapshot(self):
         """Create an atomic snapshot of current state for rendering."""
         self._events_snapshot = list(self.events)
-        self._active_keys_snapshot = dict(self.active_keys)
         self._snapshot_timestamp = time.perf_counter()
-        
+
         logger.debug(f"[SNAPSHOT] Created at timestamp={self._snapshot_timestamp:.3f}, "
                      f"events={len(self._events_snapshot)}, active_keys={list(self._active_keys_snapshot.keys())}")
 
@@ -89,11 +72,19 @@ class PianoRollWidget(Widget):
 
         return sorted(keys, key=get_sort_order)
 
-    def _calculate_key_timeline(self, key, view_start, view_end):
-        """Calculate timeline blocks for a specific key."""
-        num_blocks = TIMELINE_BLOCK_WIDTH
+    def _calculate_key_timeline(self, key, view_start, view_end, num_blocks=None):
+        """Calculate timeline blocks for a specific key.
+        
+        Args:
+            key: Key name
+            view_start: Start of view window
+            view_end: End of view window
+            num_blocks: Number of timeline blocks (auto-calculated if None)
+        """
+        if num_blocks is None:
+            num_blocks = TIMELINE_BLOCK_WIDTH
+        
         timeline = []
-
         press_times = []
 
         # Collect all press/release pairs using queue
@@ -141,10 +132,13 @@ class PianoRollWidget(Widget):
         else:
             logger.debug(f"[TIMELINE] Key {key} is NOT in active_keys_snapshot")
 
+        # Calculate resolution based on actual number of blocks
+        actual_resolution = VIEW_WINDOW_SECONDS / num_blocks
+        
         # For each block, check if any press interval overlaps
         for i in range(num_blocks):
-            block_start = view_start + (i * VIEW_RESOLUTION)
-            block_end = block_start + VIEW_RESOLUTION
+            block_start = view_start + (i * actual_resolution)
+            block_end = block_start + actual_resolution
 
             block_active = False
             for press_start, press_end in press_times:
@@ -157,7 +151,7 @@ class PianoRollWidget(Widget):
             timeline.append('█' if block_active else ' ')
 
         filled_count = timeline.count('█')
-        logger.debug(f"[TIMELINE] key={key}, filled_blocks={filled_count}/100, press_times={press_times}")
+        logger.debug(f"[TIMELINE] key={key}, filled_blocks={filled_count}/{num_blocks}, press_times={press_times}")
 
         return ''.join(timeline)
 
@@ -174,10 +168,17 @@ class PianoRollWidget(Widget):
         logger.debug(f"[RENDER] Starting render at time={current_time:.3f}, view=[{view_start:.3f}, {view_end:.3f}]")
 
         active_keys = self._get_active_keys_in_window(view_start, view_end)
+        
+        # Calculate timeline width based on available space
+        # Account for: label(12) + " | "(3) + timeline + " | "(3) + status(~15)
+        # Total fixed width: ~33 chars, leave some margin
+        available_width = max(self.size.width - 35, 40)  # minimum 40 blocks
+        timeline_blocks = min(available_width, TIMELINE_BLOCK_WIDTH)
+        separator_width = min(available_width + 10, 70)
 
         text = Text()
         text.append("DYNAMIC PIANO ROLL\n", style="bold #7aa2f7")
-        text.append("=" * 70 + "\n\n", style="dim")
+        text.append("=" * separator_width + "\n\n", style="dim")
 
         if not active_keys:
             last_activity = None
@@ -191,7 +192,8 @@ class PianoRollWidget(Widget):
 
             text.append("\n", style="dim")
             text.append(f"View Window: {VIEW_WINDOW_SECONDS}s | ", style="dim")
-            text.append(f"Resolution: {VIEW_RESOLUTION*1000:.0f}ms/block", style="dim")
+            actual_resolution = VIEW_WINDOW_SECONDS / timeline_blocks
+            text.append(f"Resolution: {actual_resolution*1000:.0f}ms/block ({timeline_blocks} blocks)", style="dim")
 
             logger.debug(f"[RENDER] No active keys, last_activity={last_activity}")
             return text
@@ -207,7 +209,7 @@ class PianoRollWidget(Widget):
 
             text.append(f"{label.ljust(max_label_length)} | ", style="bold cyan")
 
-            timeline = self._calculate_key_timeline(key, view_start, view_end)
+            timeline = self._calculate_key_timeline(key, view_start, view_end, num_blocks=timeline_blocks)
             text.append(timeline, style="bold #7aa2f7")
 
             text.append(" | ", style="dim")
@@ -221,7 +223,7 @@ class PianoRollWidget(Widget):
             text.append("\n")
 
         text.append("\n", style="dim")
-        text.append("-" * 70, style="dim")
+        text.append("-" * separator_width, style="dim")
         text.append(" Time (", style="dim")
         text.append(f"{-VIEW_WINDOW_SECONDS:.0f}s", style="bold #7aa2f7")
         text.append(" → now)", style="dim")
@@ -234,7 +236,6 @@ class PianoRollWidget(Widget):
 
     def clear(self):
         self.events.clear()
-        self.active_keys.clear()
         self._events_snapshot = []
         self._active_keys_snapshot = {}
         self._snapshot_timestamp = 0.0

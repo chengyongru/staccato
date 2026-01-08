@@ -15,6 +15,11 @@ from staccato.analyzer import TimingAnalyzer
 from staccato.widgets.stats_panel import StatsPanel
 from staccato.widgets.event_log import EventLog
 from staccato.widgets.piano_roll import PianoRollWidget
+from staccato.key_tracker import KeyStateTracker
+
+from staccato.logger import get_logger
+
+logger = get_logger("APP")
 
 
 class StaccatoApp(App):
@@ -33,6 +38,7 @@ class StaccatoApp(App):
         self.collector = KeyboardCollector(self)
         self.session_manager = SessionManager()
         self.analyzer = TimingAnalyzer()
+        self.key_tracker = KeyStateTracker()
 
         # State
         self.is_recording = False
@@ -43,8 +49,6 @@ class StaccatoApp(App):
     def compose(self) -> ComposeResult:
         """Compose the UI."""
         yield Header()
-
-        yield Static(" [bold]Staccato[/bold] - Input Micro-timing Analyzer ", classes="header")
 
         with Vertical(id="main"):
             yield StatsPanel()
@@ -62,6 +66,13 @@ class StaccatoApp(App):
 
     def on_mount(self) -> None:
         """Initialize app on mount."""
+        # Register listeners with key tracker
+        piano_roll = self.query_one(PianoRollWidget)
+        event_log = self.query_one(EventLog)
+
+        self.key_tracker.add_listener(lambda e, keys: piano_roll.add_event(e, keys))
+        self.key_tracker.add_listener(lambda e, keys: event_log.log_event(e, keys))
+
         # Start keyboard listener using keyboard library
         self.collector.start()
 
@@ -96,6 +107,8 @@ class StaccatoApp(App):
 
     def process_event(self, event: KeyEvent):
         """Process a single keyboard event."""
+        logger.debug(f"[APP] process_event: key={event.key}, type={event.event_type}, timestamp={event.timestamp:.3f}")
+
         # Add to current session if recording
         if self.is_recording and self.current_session:
             self.current_session.events.append(event)
@@ -110,14 +123,15 @@ class StaccatoApp(App):
             if current_time - e.timestamp <= 10.0
         ]
 
-        # Update piano roll
-        self.query_one(PianoRollWidget).add_event(event)
+        # Process event through centralized key tracker
+        processed = self.key_tracker.process_event(event)
+
+        if not processed:
+            logger.debug(f"[APP] Event {event.key} ({event.event_type}) was filtered out by key tracker")
+            return
 
         # Force immediate refresh for real-time responsiveness
         self.query_one(PianoRollWidget).refresh()
-
-        # Update event log
-        self.query_one(EventLog).log_event(event)
 
     def calculate_stats(self):
         """Calculate and display universal statistics every second."""
@@ -169,8 +183,9 @@ class StaccatoApp(App):
         if self.current_session:
             self.current_session.end_time = time.perf_counter()
 
+        event_count = len(self.current_session.events) if self.current_session else 0
         self.query_one(EventLog).log_success(
-            f"Recording stopped. Captured {len(self.current_session.events)} events."
+            f"Recording stopped. Captured {event_count} events."
         )
         self.query_one("#btn-record").display = True
         self.query_one("#btn-stop").display = False
@@ -193,6 +208,7 @@ class StaccatoApp(App):
         """Clear current session."""
         self.current_session = None
         self.live_events = []
+        self.key_tracker.clear()
         self.query_one(PianoRollWidget).clear()
         self.query_one(EventLog).clear()
         self.query_one(StatsPanel).clear()
