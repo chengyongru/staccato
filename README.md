@@ -1,5 +1,4 @@
-# Staccato (断奏)
-
+# Staccato
 <div align="center">
 
 ![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)
